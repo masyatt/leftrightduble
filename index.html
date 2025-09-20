@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>왼손·오른손 2인 총알피하기 (싱글플레이·양쪽 조작)</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #101720;
+      --text: #e6f0ff;
+      --muted: #92a3b5;
+      --leftColor: #4dd0e1;   /* 청록 */
+      --rightColor: #ff6f61;  /* 코랄 */
+      --bullet: #cbd5e1;
+      --ok: #10b981;         /* green */
+      --danger: #ef4444;     /* red */
+      --scale: 0.666;        /* 전체 게임 화면 스케일 (2/3) */
+    }
+    html, body {
+      margin: 0; height: 100%; background: var(--bg); color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    }
+    header {
+      padding: 14px 16px; border-bottom: 1px solid #1c2733; background: #0d141c;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    }
+    .title { font-weight: 800; letter-spacing: 0.2px; }
+    .subtitle { color: var(--muted); font-size: 14px; }
+    .wrap {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0; height: calc(100% - 66px);
+    }
+    .panel {
+      position: relative; background: var(--panel); border-left: 1px solid #1c2733; overflow: hidden;
+      display: flex; align-items: center; justify-content: center; /* 정사각형 스테이지를 가운데 배치 */
+    }
+    .panel:first-child { border-left: none; }
+    .panel:first-child { border-left: none; }
+
+    /* 스케일 적용 래퍼 */
+    .stage { position: relative; width: 600px; height: 600px; /* JS에서 정사각형으로 재계산됨 */
+      transform: scale(var(--scale)); transform-origin: top left; }
+
+    canvas { width: 100%; height: 100%; display: block; }
+
+    .hud {
+      position: absolute; inset: 0; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between;
+      padding: 14px; font-variant-numeric: tabular-nums;
+    }
+    .hud .row { display: flex; align-items: center; gap: 10px; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 12px; background: rgba(0,0,0,.35);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+    }
+    .pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+    .centerMsg {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      text-align: center; pointer-events: none;
+      background: rgba(0,0,0,.35); padding: 16px 20px; border-radius: 14px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+      backdrop-filter: blur(2px);
+    }
+    .centerMsg h2 { margin: 0 0 8px; font-size: 22px; }
+    .centerMsg p { margin: 4px 0; color: var(--muted); font-size: 14px; }
+
+    .controls { display: flex; gap: 6px; flex-wrap: wrap; }
+    kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 12px; padding: 2px 6px; border-radius: 6px; background: #0b1320; border: 1px solid #1f2b3a; color: #cde3ff; }
+
+    .btnRow { display: flex; gap: 8px; align-items: center; }
+    .btn {
+      appearance: none; border: 1px solid #2a3a4e; background: #0f1722; color: #cde3ff; padding: 8px 10px; border-radius: 10px; cursor: pointer;
+    }
+    .btn:hover { background: #121c2a; }
+
+    .globalHud { display: flex; gap: 8px; align-items: center; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .globalHud .strong { color: var(--text); font-weight: 700; }
+
+    @media (max-width: 900px) {
+      .wrap { grid-template-columns: 1fr; height: auto; min-height: calc(100% - 66px); }
+      .panel { height: 50vh; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="title">왼손·오른손 총알피하기 (한 사람이 양쪽 동시 조작)</div>
+      <div class="subtitle">왼쪽: WASD · 오른쪽: 화살표 · <b>둘 중 하나라도 맞으면 즉시 게임 종료</b> · <kbd>R</kbd> 재시작</div>
+    </div>
+    <div class="btnRow">
+      <div class="globalHud">
+        <span>현재: <span class="strong" id="totalNow">0.00s</span></span>
+        <span>최고: <span class="strong" id="totalBest">0.00s</span></span>
+      </div>
+      <button class="btn" id="restartAll">재시작 (R)</button>
+      <button class="btn" id="clearBest">기록 초기화</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="panel" id="leftPanel" aria-label="왼쪽 게임 영역">
+      <div class="stage">
+        <canvas id="leftCanvas"></canvas>
+        <div class="hud">
+          <div class="row">
+            <span class="pill"><span class="dot" style="background: var(--leftColor)"></span>LEFT · WASD</span>
+          </div>
+        </div>
+        <div class="centerMsg" id="leftMsg">
+          <h2>왼쪽 플레이어</h2>
+          <p>이동: <span class="controls"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span></p>
+          <p>WASD 또는 화살표 중 <b>아무 키</b>나 누르면 전체 게임 시작</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="rightPanel" aria-label="오른쪽 게임 영역">
+      <div class="stage">
+        <canvas id="rightCanvas"></canvas>
+        <div class="hud">
+          <div class="row">
+            <span class="pill"><span class="dot" style="background: var(--rightColor)"></span>RIGHT · 화살표</span>
+          </div>
+        </div>
+        <div class="centerMsg" id="rightMsg">
+          <h2>오른쪽 플레이어</h2>
+          <p>이동: <span class="controls"><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd></span></p>
+          <p>WASD 또는 화살표 중 <b>아무 키</b>나 누르면 전체 게임 시작</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // -------------------- 유틸 --------------------
+    const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const now = () => performance.now();
+    const getCss = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+    // -------------------- 입력 --------------------
+    const keys = new Set();
+    window.addEventListener('keydown', (e) => {
+      keys.add(e.key);
+      if (e.key.toLowerCase() === 'r') manager.restart();
+      // 어떤 방향키든 처음 누르면 시작
+      if (!manager.running && !manager.over) {
+        const dirKeys = ['a','A','d','D','w','W','s','S','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'];
+        if (dirKeys.includes(e.key)) manager.start();
+      }
+    });
+    window.addEventListener('keyup', (e) => keys.delete(e.key));
+
+    // -------------------- 게임 클래스 (양쪽 동일 로직) --------------------
+    class DodgeGame {
+      constructor(canvas, side) {
+        this.canvas = canvas; this.ctx = canvas.getContext('2d');
+        this.side = side; // 'left' | 'right'
+        this.stage = this.canvas.parentElement; // 정사각형 스테이지 래퍼
+        this.width = 0; this.height = 0;
+        this.player = { x: 0, y: 0, size: 16, speed: 220 }; // px/s
+        this.bullets = []; // {x,y, vx, vy, r}
+        this.spawnBase = 900; // ms
+        this.spawnMin = 220; // ms (난이도 상한)
+        this.lastSpawn = 0;
+        this.color = side === 'left' ? getCss('--leftColor') : getCss('--rightColor');
+        this.msg = document.getElementById(side + 'Msg');
+        this.resize();
+      }
+      resize(){
+        // 패널 영역 중 짧은 변에 맞춘 정사각형 스테이지
+        const panelRect = this.stage.parentElement.getBoundingClientRect();
+        const size = Math.max(300, Math.min(panelRect.width, panelRect.height));
+        this.stage.style.width = size + 'px';
+        this.stage.style.height = size + 'px';
+        this.width = size; this.height = size;
+        this.canvas.width = (this.width * DPR)|0; this.canvas.height = (this.height * DPR)|0;
+        this.ctx.setTransform(DPR,0,0,DPR,0,0);
+        this.player.x = this.width/2; this.player.y = this.height/2;
+      }
+      reset(){
+        this.bullets.length = 0; this.lastSpawn = 0; this.spawnBase = 900;
+        this.msg.style.display = '';
+        this.player.x = this.width/2; this.player.y = this.height/2;
+      }
+      hideMsg(){ this.msg.style.display = 'none'; }
+      handleInput(dt){
+        const sp = this.player.speed * dt;
+        if (this.side === 'left') {
+          if (keys.has('a')||keys.has('A')) this.player.x -= sp;
+          if (keys.has('d')||keys.has('D')) this.player.x += sp;
+          if (keys.has('w')||keys.has('W')) this.player.y -= sp;
+          if (keys.has('s')||keys.has('S')) this.player.y += sp;
+        } else {
+          if (keys.has('ArrowLeft')) this.player.x -= sp;
+          if (keys.has('ArrowRight')) this.player.x += sp;
+          if (keys.has('ArrowUp')) this.player.y -= sp;
+          if (keys.has('ArrowDown')) this.player.y += sp;
+        }
+        this.player.x = clamp(this.player.x, this.player.size, this.width - this.player.size);
+        this.player.y = clamp(this.player.y, this.player.size, this.height - this.player.size);
+      }
+      spawnBullets(t, surviveMs){
+        // 시간이 지날수록 더 자주/빠르게 스폰
+        const interval = clamp(this.spawnBase - surviveMs*0.08, this.spawnMin, 9999);
+        if (t - this.lastSpawn < interval) return;
+        this.lastSpawn = t;
+        const count = 1 + Math.floor(Math.min(4, surviveMs/4000));
+        for (let i=0;i<count;i++){
+          const edge = Math.floor(Math.random()*4);
+          let x,y,vx,vy;
+          const speed = 120 + Math.min(200, surviveMs*0.05) + Math.random()*40;
+          const r = 7 + Math.random()*6;
+          if (edge===0){ x=Math.random()*this.width; y=-r; vx=(Math.random()-0.5)*speed*0.6; vy=speed; }
+          else if (edge===1){ x=this.width+r; y=Math.random()*this.height; vx=-speed; vy=(Math.random()-0.5)*speed*0.6; }
+          else if (edge===2){ x=Math.random()*this.width; y=this.height+r; vx=(Math.random()-0.5)*speed*0.6; vy=-speed; }
+          else { x=-r; y=Math.random()*this.height; vx=speed; vy=(Math.random()-0.5)*speed*0.6; }
+          this.bullets.push({x,y,vx,vy,r});
+        }
+        if (this.bullets.length > 400) this.bullets.splice(0, this.bullets.length-400);
+      }
+      update(dt, t, running, surviveMs){
+        if (running) this.handleInput(dt);
+        if (running) this.spawnBullets(t, surviveMs);
+        const px = this.player.x, py = this.player.y, pr = this.player.size*0.8;
+        for (const b of this.bullets){ b.x += b.vx*dt; b.y += b.vy*dt; }
+        // 경계 밖 탄 정리
+        this.bullets = this.bullets.filter(b => b.x>-30 && b.x<this.width+30 && b.y>-30 && b.y<this.height+30);
+        // 충돌 체크 (running일 때만)
+        if (running){
+          for (const b of this.bullets){
+            const dx = b.x - px, dy = b.y - py; const rr = (b.r + pr); if (dx*dx + dy*dy < rr*rr){ return true; }
+          }
+        }
+        return false; // 충돌 없음
+      }
+      draw(over){
+        const c = this.ctx; c.clearRect(0,0,this.width,this.height);
+        // 배경 그리드
+        c.globalAlpha = 0.25; c.strokeStyle = '#1a2330'; c.lineWidth = 1;
+        const step = 32; for (let x=0;x<this.width;x+=step){ c.beginPath(); c.moveTo(x,0); c.lineTo(x,this.height); c.stroke(); }
+        for (let y=0;y<this.height;y+=step){ c.beginPath(); c.moveTo(0,y); c.lineTo(this.width,y); c.stroke(); }
+        c.globalAlpha = 1;
+        // 움직임 경계선 (플레이어 중심이 이동 가능한 영역)
+        const pad = this.player.size; // clamp에서 사용한 여백과 동일
+        c.save();
+        c.setLineDash([6,6]);
+        c.lineWidth = 2;
+        c.globalAlpha = 0.9;
+        c.strokeStyle = getCss('--muted');
+        c.strokeRect(pad, pad, this.width - 2*pad, this.height - 2*pad);
+        c.restore();
+        // 플레이어
+        c.fillStyle = this.side==='left'? getCss('--leftColor') : getCss('--rightColor');
+        const s = this.player.size; c.beginPath(); c.roundRect(this.player.x - s/2, this.player.y - s/2, s, s, 4); c.fill();
+        // 총알
+        c.fillStyle = getCss('--bullet');
+        for (const b of this.bullets){ c.beginPath(); c.arc(b.x,b.y,b.r,0,Math.PI*2); c.fill(); }
+        if (over){ c.strokeStyle = getCss('--danger'); c.lineWidth = 4; c.strokeRect(2,2,this.width-4,this.height-4); }
+      }
+    }
+
+    // -------------------- 매니저: 둘 중 하나라도 죽으면 종료 --------------------
+    const left = new DodgeGame(document.getElementById('leftCanvas'), 'left');
+    const right = new DodgeGame(document.getElementById('rightCanvas'), 'right');
+
+    const manager = {
+      running: false,
+      over: false,
+      startAt: 0,
+      surviveMs: 0,
+      bestMs: Number(localStorage.getItem('bestTotal') || '0'),
+      totalNowEl: document.getElementById('totalNow'),
+      totalBestEl: document.getElementById('totalBest'),
+      updateHUD(){ this.totalNowEl.textContent = (this.surviveMs/1000).toFixed(2) + 's'; this.totalBestEl.textContent = (this.bestMs/1000).toFixed(2) + 's'; },
+      start(){ if (this.running || this.over) return; this.running = true; this.startAt = now(); left.hideMsg(); right.hideMsg(); },
+      gameOver(){
+        if (this.over) return; this.running = false; this.over = true;
+        // 최고 기록 갱신
+        if (this.surviveMs > this.bestMs){ this.bestMs = this.surviveMs; localStorage.setItem('bestTotal', String(this.bestMs)); }
+        this.updateHUD();
+        // 센터 메시지 다시 보여주기
+        document.getElementById('leftMsg').style.display = '';
+        document.getElementById('rightMsg').style.display = '';
+      },
+      restart(){
+        this.running = false; this.over = false; this.surviveMs = 0; this.updateHUD();
+        left.reset(); right.reset();
+      }
+    };
+    manager.updateHUD();
+
+    // -------------------- 루프 & 리사이즈 --------------------
+    function onResize(){ left.resize(); right.resize(); }
+    window.addEventListener('resize', onResize);
+    onResize();
+
+    let last = now();
+    function tick(){
+      const t = now(); const dt = Math.min(0.033, (t - last)/1000); last = t;
+      if (manager.running){ manager.surviveMs = t - manager.startAt; manager.updateHUD(); }
+      const hitLeft = left.update(dt, t, manager.running, manager.surviveMs);
+      const hitRight = right.update(dt, t, manager.running, manager.surviveMs);
+      if (manager.running && (hitLeft || hitRight)) manager.gameOver();
+      left.draw(manager.over); right.draw(manager.over);
+      requestAnimationFrame(tick);
+    }
+    tick();
+
+    // 버튼/단축키
+    document.getElementById('restartAll').addEventListener('click', ()=>manager.restart());
+    document.getElementById('clearBest').addEventListener('click', ()=>{ localStorage.removeItem('bestTotal'); manager.bestMs = 0; manager.updateHUD(); });
+
+    // 재시작 안내 토스트
+    window.addEventListener('keydown', (e)=>{
+      if (e.key.toLowerCase()==='r'){
+        const banner = document.createElement('div');
+        banner.textContent = '재시작';
+        Object.assign(banner.style, {position:'fixed', left:'50%', top:'14px', transform:'translateX(-50%)', background:'rgba(0,0,0,.6)', color:'#cde3ff', padding:'6px 10px', borderRadius:'10px', fontSize:'12px', border:'1px solid #2a3a4e', zIndex:9999});
+        document.body.appendChild(banner); setTimeout(()=>banner.remove(), 700);
+      }
+    });
+  </script>
+</body>
+</html>
