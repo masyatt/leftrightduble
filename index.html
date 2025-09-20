@@ -76,8 +76,11 @@
     .globalHud { display: flex; gap: 8px; align-items: center; color: var(--muted); font-variant-numeric: tabular-nums; }
     .globalHud .strong { color: var(--text); font-weight: 700; }
 
-    @media (max-width: 900px) {
-      .wrap { grid-template-columns: 1fr; height: auto; min-height: calc(100% - 66px); }
+    /* 모바일에서도 항상 좌우 2분할을 유지합니다. 필요하면 이 미디어쿼리를 복구하세요. */
+/* @media (max-width: 900px) {
+  .wrap { grid-template-columns: 1fr; height: auto; min-height: calc(100% - 66px); }
+  .panel { height: 50vh; }
+} */
       .panel { height: 50vh; }
     }
   </style>
@@ -133,6 +136,16 @@
   </main>
 
   <script>
+    // 포커스 안내 오버레이 (최초 1회 클릭 유도)
+    const focusHint = document.createElement('div');
+    focusHint.textContent = '클릭하면 조작이 고정됩니다 (화살표/스크롤 방지)';
+    Object.assign(focusHint.style, {position:'fixed', left:'50%', bottom:'16px', transform:'translateX(-50%)', background:'rgba(0,0,0,.6)', color:'#cde3ff', padding:'6px 10px', borderRadius:'10px', fontSize:'12px', border:'1px solid #2a3a4e', zIndex:9999, pointerEvents:'none'});
+    document.body.appendChild(focusHint);
+    const hideHint = () => { focusHint.remove(); window.removeEventListener('pointerdown', hideHint); };
+    window.addEventListener('pointerdown', hideHint, {once:true});
+  </script>
+
+  <script>
     // -------------------- 유틸 --------------------
     const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
     const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -142,14 +155,18 @@
     // -------------------- 입력 --------------------
     const keys = new Set();
     window.addEventListener('keydown', (e) => {
+      // 블로그(상위 문서) 스크롤 방지: 화살표/스페이스/페이지 업다운 시 기본 스크롤 막기
+      const scrollKeys = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','PageUp','PageDown','Home','End'];
+      if (scrollKeys.includes(e.key)) {
+        e.preventDefault();
+      }
       keys.add(e.key);
       if (e.key.toLowerCase() === 'r') manager.restart();
-      // 어떤 방향키든 처음 누르면 시작
       if (!manager.running && !manager.over) {
         const dirKeys = ['a','A','d','D','w','W','s','S','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'];
         if (dirKeys.includes(e.key)) manager.start();
       }
-    });
+    }, {capture:true});
     window.addEventListener('keyup', (e) => keys.delete(e.key));
 
     // -------------------- 게임 클래스 (양쪽 동일 로직) --------------------
