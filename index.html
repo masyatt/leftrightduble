@@ -180,7 +180,8 @@
         this.stage = this.canvas.parentElement; // 정사각형 스테이지 래퍼
         this.width = 0; this.height = 0;
         this.player = { x: 0, y: 0, size: 4, speed: 220 }; // 캐릭터 크기 1/4로 축소 (기존 16→4) // px/s
-        this.padFactor = 0.5; // 플레이 반경을 50% 확장 (기존 size → size*0.5 여백)
+        this.padFactor = 0.5; // 플레이 반경 확장 비율
+        this.bulletSpeedScale = 0.5; // 총알 속도 1/2
         this.bullets = []; // {x,y, vx, vy, r}
         this.spawnBase = 900; // ms
         this.spawnMin = 220; // ms (난이도 상한)
@@ -234,8 +235,9 @@
         for (let i=0;i<count;i++){
           const edge = Math.floor(Math.random()*4);
           let x,y,vx,vy;
-          const speed = 120 + Math.min(200, surviveMs*0.05) + Math.random()*40;
-          const r = 4 + Math.random()*4; // 총알을 더 작게
+          const base = 120 + Math.min(200, surviveMs*0.05) + Math.random()*40;
+          const speed = base * this.bulletSpeedScale;
+          const r = 2 + Math.random()*2; // 총알 반지름 1/2 (기존 4~8 → 2~4) // 총알을 더 작게
           if (edge===0){ x=Math.random()*this.width; y=-r; vx=(Math.random()-0.5)*speed*0.6; vy=speed; }
           else if (edge===1){ x=this.width+r; y=Math.random()*this.height; vx=-speed; vy=(Math.random()-0.5)*speed*0.6; }
           else if (edge===2){ x=Math.random()*this.width; y=this.height+r; vx=(Math.random()-0.5)*speed*0.6; vy=-speed; }
