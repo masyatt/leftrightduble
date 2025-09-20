@@ -15,14 +15,11 @@
       --bullet: #cbd5e1;
       --ok: #10b981;         /* green */
       --danger: #ef4444;     /* red */
-      --scale: 0.666;        /* 시각적 축소가 아닌 실제 크기 조정에 사용 */
-      --wrapH: 100vh;        /* JS에서 헤더 제외한 높이로 갱신 */
+      --scale: 0.666;        /* 전체 게임 화면 스케일 (2/3) */
     }
     html, body {
       margin: 0; height: 100%; background: var(--bg); color: var(--text);
       font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
-      /* 내부 스크롤 방지 */
-      overflow: hidden;
     }
     header {
       padding: 14px 16px; border-bottom: 1px solid #1c2733; background: #0d141c;
@@ -31,7 +28,7 @@
     .title { font-weight: 800; letter-spacing: 0.2px; }
     .subtitle { color: var(--muted); font-size: 14px; }
     .wrap {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 0; height: var(--wrapH);
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0; height: calc(100% - 66px);
     }
     .panel {
       position: relative; background: var(--panel); border-left: 1px solid #1c2733; overflow: hidden;
@@ -41,7 +38,8 @@
     .panel:first-child { border-left: none; }
 
     /* 스케일 적용 래퍼 */
-    .stage { position: relative; /* 크기는 JS에서 계산(정사각형 × scale) */ }
+    .stage { position: relative; width: 600px; height: 600px; /* JS에서 정사각형으로 재계산됨 */
+      transform: scale(var(--scale)); transform-origin: top left; }
 
     canvas { width: 100%; height: 100%; display: block; }
 
@@ -188,11 +186,9 @@
         this.resize();
       }
       resize(){
-        // 패널 영역 중 짧은 변에 맞춘 정사각형 스테이지, scale 적용(레이아웃 크기 자체를 줄임)
+        // 패널 영역 중 짧은 변에 맞춘 정사각형 스테이지
         const panelRect = this.stage.parentElement.getBoundingClientRect();
-        const scale = parseFloat(getCss('--scale')) || 1;
-        const base = Math.max(300, Math.min(panelRect.width, panelRect.height));
-        const size = Math.floor(base * scale);
+        const size = Math.max(300, Math.min(panelRect.width, panelRect.height));
         this.stage.style.width = size + 'px';
         this.stage.style.height = size + 'px';
         this.width = size; this.height = size;
@@ -313,13 +309,7 @@
     manager.updateHUD();
 
     // -------------------- 루프 & 리사이즈 --------------------
-    function onResize(){
-      // 헤더 높이를 제외한 랩 높이 계산 → 내부 스크롤 방지
-      const head = document.querySelector('header');
-      const h = Math.max(320, window.innerHeight - head.offsetHeight);
-      document.documentElement.style.setProperty('--wrapH', h + 'px');
-      left.resize(); right.resize();
-    }
+    function onResize(){ left.resize(); right.resize(); }
     window.addEventListener('resize', onResize);
     onResize();
 
